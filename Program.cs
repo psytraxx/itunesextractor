@@ -1,7 +1,11 @@
 ﻿using System;
+using System.IO;
 using System.Linq;
 using System.Net;
+using System.Text;
 using ITunesLibraryParser;
+using ShellProgressBar;
+using TagLib;
 
 namespace itunesextractor
 {
@@ -15,49 +19,122 @@ namespace itunesextractor
                 folderName = args[0];
             }
 
+            var options = new ProgressBarOptions
+            {
+                ProgressCharacter = '─',
+                ProgressBarOnBottom = true
+            };
+
             var library = new ITunesLibrary(folderName);
 
-            foreach (var itunesTrack in library.Tracks.Where(t => !t.Location.Contains("http://")))
+            // ignore streams (http://) for tracking
+            var tracks = library.Tracks.Where(t => !t.Location.Contains("http://")).ToList();
+
+            using (var pbar = new ProgressBar(tracks.Count(), "Initial message", options))
             {
-                var clean = WebUtility.UrlDecode(itunesTrack.Location.Replace("file://localhost/", "").Replace("/", "\\"));
-                try
+                foreach (var itunesTrack in tracks)
                 {
-
-                    using (var mp3File = TagLib.File.Create(clean))
+                    // create a windows path from the itunes location
+                    var clean = WebUtility.UrlDecode(itunesTrack.Location.Replace("file://localhost/", "").Replace("/", "\\"));
+                    try
                     {
+                        TagLib.Id3v2.Tag.DefaultVersion = 4;
+                        TagLib.Id3v2.Tag.ForceDefaultVersion = true;
 
-                        TagLib.Id3v2.Tag tag = (TagLib.Id3v2.Tag)mp3File.GetTag(TagLib.TagTypes.Id3v2, true);
-
-                        // strip old popularity frames
-                        foreach (var oldPopFrame in tag.GetFrames<TagLib.Id3v2.PopularimeterFrame>().ToArray())
+                        using (var mp3File = TagLib.File.Create(clean))
                         {
-                            tag.RemoveFrame(oldPopFrame);
-                        }
+                            TagLib.Id3v2.Tag tag = (TagLib.Id3v2.Tag)mp3File.GetTag(TagLib.TagTypes.Id3v2, true);
 
-                        var frame = TagLib.Id3v2.PopularimeterFrame.Get(tag, "Windows Media Player 9 Series", true);
-                        if (itunesTrack.Rating.HasValue)
-                        {
-                            var stars = itunesTrack.Rating.Value / 20; // itunes sends 20 x star value
-                            frame.Rating = TransformRating(stars);
-                        }
-                        if (itunesTrack.PlayCount.HasValue)
-                        {
-                            frame.PlayCount = (ulong)itunesTrack.PlayCount.Value;
-                        }
+                            // strip old popularity frames
+                            foreach (var oldPopFrame in tag.GetFrames<TagLib.Id3v2.PopularimeterFrame>().ToArray())
+                            {
+                                tag.RemoveFrame(oldPopFrame);
+                            }
 
-                        mp3File.Save();
+                            //tag.AlbumArtists = new[] { itunesTrack.AlbumArtist };
+                            //tag.Performers = new[] { itunesTrack.Artist };
+                            //tag.Genres = new[] { itunesTrack.Genre };
+                            //tag.IsCompilation = itunesTrack.PartOfCompilation;
 
+                            //RemoveLyrics(mp3File);
+
+                            var frame = TagLib.Id3v2.PopularimeterFrame.Get(tag, "Windows Media Player 9 Series", true);
+                            if (itunesTrack.Rating.HasValue)
+                            {
+                                var stars = itunesTrack.Rating.Value / 20; // itunes sends 20 x star value
+                                frame.Rating = TransformRating(stars);
+                            }
+                            if (itunesTrack.PlayCount.HasValue)
+                            {
+                                frame.PlayCount = (ulong)itunesTrack.PlayCount.Value;
+                            }
+
+                            //only keep existing tags in file
+                            var removeTags = mp3File.TagTypes & ~mp3File.TagTypesOnDisk;
+                            mp3File.RemoveTags(removeTags);
+
+                            mp3File.Save();
+
+                            pbar.Tick($"updating {clean}");
+
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error updating the playcount: {ex.Message}");
                     }
                 }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error updating the playcount: {ex.Message}");
-                }
+
             }
 
-
-
         }
+
+        private static void RemoveLyrics(TagLib.File mp3File)
+        {
+            var maxLength = 512;
+            ByteVector initVector = new ByteVector(Encoding.UTF8.GetBytes("LYRICSBEGIN"));
+            long initOffset = mp3File.Find(initVector, startPosition: 0);
+
+            if ((initOffset != -1))
+            {
+
+                // The Lyrics3 block can end with one of these two markups, so we need to evaluate both.
+                foreach (string str in new[] { "LYRICS200", "LYRICSEND" })
+                {
+                    ByteVector endVector = new ByteVector(Encoding.UTF8.GetBytes(str));
+                    long endOffset = mp3File.Find(endVector, startPosition: initOffset);
+
+                    if ((endOffset != -1))
+                    {
+                        int length = System.Convert.ToInt32(endOffset - initOffset) + (str.Length);
+                        if ((length < maxLength))
+                        {
+                            try
+                            {
+                                mp3File.Seek(initOffset, SeekOrigin.Begin);
+                                // Dim raw As String = Me.mp3File.ReadBlock(length).ToString()
+                                mp3File.RemoveBlock(initOffset, length);
+                                Console.WriteLine($"Removed lyrics in {mp3File.Name}");
+                                return;
+                            }
+                            catch (Exception ex)
+                            {
+                                throw ex;
+                            }
+
+                            finally
+                            {
+                                mp3File.Seek(0, SeekOrigin.Begin);
+                            }
+                        }
+                        else
+                            // We can handle it or continue...
+                            continue;
+                    }
+                }
+            }
+        }
+
 
         private static byte TransformRating(int rating)
         {

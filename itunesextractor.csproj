@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="iTunesLibraryParser" Version="1.1.27" />
+    <PackageReference Include="ShellProgressBar" Version="4.2.0" />
     <PackageReference Include="taglib" Version="2.1.0.0" />
   </ItemGroup>
 </Project>
