@@ -64,7 +64,7 @@ namespace itunesextractor
                                 var stars = itunesTrack.Rating.Value / 20; // itunes sends 20 x star value
                                 frame.Rating = TransformRating(stars);
                             }
-                            if (itunesTrack.PlayCount.HasValue)
+                            if (itunesTrack.PlayCount.HasValue && (ulong)itunesTrack.PlayCount.Value > frame.PlayCount)
                             {
                                 frame.PlayCount = (ulong)itunesTrack.PlayCount.Value;
                             }
