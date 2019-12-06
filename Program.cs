@@ -6,6 +6,7 @@ using System.Text;
 using ITunesLibraryParser;
 using ShellProgressBar;
 using TagLib;
+using System.Threading.Tasks;
 
 namespace itunesextractor
 {
@@ -32,7 +33,7 @@ namespace itunesextractor
 
             using (var pbar = new ProgressBar(tracks.Count(), "Initial message", options))
             {
-                foreach (var itunesTrack in tracks)
+                Parallel.ForEach(tracks, itunesTrack =>
                 {
                     // create a windows path from the itunes location
                     var clean = WebUtility.UrlDecode(itunesTrack.Location.Replace("file://localhost/", "").Replace("/", "\\"));
@@ -75,15 +76,15 @@ namespace itunesextractor
 
                             mp3File.Save();
 
-                            pbar.Tick($"updating {clean}");
-
                         }
                     }
                     catch (Exception ex)
                     {
                         Console.WriteLine($"Error updating the playcount: {ex.Message}");
                     }
-                }
+
+                    pbar.Tick($"updating {clean}");
+                });
 
             }
 
