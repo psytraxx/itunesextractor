@@ -36,7 +36,7 @@ namespace itunesextractor
                 Parallel.ForEach(tracks, itunesTrack =>
                 {
                     // create a windows path from the itunes location
-                    var clean = WebUtility.UrlDecode(itunesTrack.Location.Replace("file://localhost/", "").Replace("/", "\\"));
+                    var clean = WebUtility.UrlDecode(itunesTrack.Location).Replace("file://localhost/", "").Replace("/", "\\");
                     try
                     {
                         TagLib.Id3v2.Tag.DefaultVersion = 4;
