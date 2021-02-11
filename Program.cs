@@ -33,16 +33,16 @@ namespace itunesextractor
 
             using (var pbar = new ProgressBar(tracks.Count(), "Initial message", options))
             {
-                Parallel.ForEach(tracks, itunesTrack =>
+                Parallel.ForEach(tracks, (itunesTrack) =>
                 {
                     // create a windows path from the itunes location
-                    var clean = WebUtility.UrlDecode(itunesTrack.Location).Replace("file://localhost/", "").Replace("/", "\\");
+                    var fileName = WebUtility.UrlDecode(itunesTrack.Location.Replace("+", "%2b")).Replace("file://localhost/", "").Replace("/", "\\");
                     try
                     {
                         TagLib.Id3v2.Tag.DefaultVersion = 4;
                         TagLib.Id3v2.Tag.ForceDefaultVersion = true;
 
-                        using (var mp3File = TagLib.File.Create(clean))
+                        using (var mp3File = TagLib.File.Create(fileName))
                         {
                             TagLib.Id3v2.Tag tag = (TagLib.Id3v2.Tag)mp3File.GetTag(TagLib.TagTypes.Id3v2, true);
 
@@ -73,9 +73,7 @@ namespace itunesextractor
                             //only keep existing tags in file
                             var removeTags = mp3File.TagTypes & ~mp3File.TagTypesOnDisk;
                             mp3File.RemoveTags(removeTags);
-
                             mp3File.Save();
-
                         }
                     }
                     catch (Exception ex)
@@ -83,11 +81,9 @@ namespace itunesextractor
                         Console.WriteLine($"Error updating the playcount: {ex.Message}");
                     }
 
-                    pbar.Tick($"updating {clean}");
+                    pbar.Tick($"updating {fileName}");
                 });
-
             }
-
         }
 
         private static void RemoveLyrics(TagLib.File mp3File)
