@@ -15,7 +15,7 @@ namespace itunesextractor
         static void Main(string[] args)
         {
             var folderName = "C:\\Users\\Eric\\Music\\iTunes\\iTunes Music Library.xml";
-            if (args.Count() > 0)
+            if (args.Length > 0)
             {
                 folderName = args[0];
             }
@@ -42,39 +42,37 @@ namespace itunesextractor
                         TagLib.Id3v2.Tag.DefaultVersion = 4;
                         TagLib.Id3v2.Tag.ForceDefaultVersion = true;
 
-                        using (var mp3File = TagLib.File.Create(fileName))
+                        using var mp3File = TagLib.File.Create(fileName);
+                        TagLib.Id3v2.Tag tag = (TagLib.Id3v2.Tag)mp3File.GetTag(TagLib.TagTypes.Id3v2, true);
+
+                        // strip old popularity frames
+                        foreach (var oldPopFrame in tag.GetFrames<TagLib.Id3v2.PopularimeterFrame>().ToArray())
                         {
-                            TagLib.Id3v2.Tag tag = (TagLib.Id3v2.Tag)mp3File.GetTag(TagLib.TagTypes.Id3v2, true);
-
-                            // strip old popularity frames
-                            foreach (var oldPopFrame in tag.GetFrames<TagLib.Id3v2.PopularimeterFrame>().ToArray())
-                            {
-                                tag.RemoveFrame(oldPopFrame);
-                            }
-
-                            //tag.AlbumArtists = new[] { itunesTrack.AlbumArtist };
-                            //tag.Performers = new[] { itunesTrack.Artist };
-                            //tag.Genres = new[] { itunesTrack.Genre };
-                            //tag.IsCompilation = itunesTrack.PartOfCompilation;
-
-                            //RemoveLyrics(mp3File);
-
-                            var frame = TagLib.Id3v2.PopularimeterFrame.Get(tag, "Windows Media Player 9 Series", true);
-                            if (itunesTrack.Rating.HasValue)
-                            {
-                                var stars = itunesTrack.Rating.Value / 20; // itunes sends 20 x star value
-                                frame.Rating = TransformRating(stars);
-                            }
-                            if (itunesTrack.PlayCount.HasValue && (ulong)itunesTrack.PlayCount.Value > frame.PlayCount)
-                            {
-                                frame.PlayCount = (ulong)itunesTrack.PlayCount.Value;
-                            }
-
-                            //only keep existing tags in file
-                            var removeTags = mp3File.TagTypes & ~mp3File.TagTypesOnDisk;
-                            mp3File.RemoveTags(removeTags);
-                            mp3File.Save();
+                            tag.RemoveFrame(oldPopFrame);
                         }
+
+                        //tag.AlbumArtists = new[] { itunesTrack.AlbumArtist };
+                        //tag.Performers = new[] { itunesTrack.Artist };
+                        //tag.Genres = new[] { itunesTrack.Genre };
+                        //tag.IsCompilation = itunesTrack.PartOfCompilation;
+
+                        //RemoveLyrics(mp3File);
+
+                        var frame = TagLib.Id3v2.PopularimeterFrame.Get(tag, "Windows Media Player 9 Series", true);
+                        if (itunesTrack.Rating.HasValue)
+                        {
+                            var stars = itunesTrack.Rating.Value / 20; // itunes sends 20 x star value
+                            frame.Rating = TransformRating(stars);
+                        }
+                        if (itunesTrack.PlayCount.HasValue && (ulong)itunesTrack.PlayCount.Value > frame.PlayCount)
+                        {
+                            frame.PlayCount = (ulong)itunesTrack.PlayCount.Value;
+                        }
+
+                        //only keep existing tags in file
+                        var removeTags = mp3File.TagTypes & ~mp3File.TagTypesOnDisk;
+                        mp3File.RemoveTags(removeTags);
+                        mp3File.Save();
                     }
                     catch (Exception ex)
                     {
@@ -101,7 +99,7 @@ namespace itunesextractor
                     ByteVector endVector = new ByteVector(Encoding.UTF8.GetBytes(str));
                     long endOffset = mp3File.Find(endVector, startPosition: initOffset);
 
-                    if ((endOffset != -1))
+                    if (endOffset != -1)
                     {
                         int length = System.Convert.ToInt32(endOffset - initOffset) + (str.Length);
                         if ((length < maxLength))
@@ -114,9 +112,9 @@ namespace itunesextractor
                                 Console.WriteLine($"Removed lyrics in {mp3File.Name}");
                                 return;
                             }
-                            catch (Exception ex)
+                            catch (Exception)
                             {
-                                throw ex;
+                                throw;
                             }
 
                             finally
@@ -135,21 +133,15 @@ namespace itunesextractor
 
         private static byte TransformRating(int rating)
         {
-            switch (rating)
+            return rating switch
             {
-                case 1:
-                    return 0x1;
-                case 2:
-                    return 0x40;// 64
-                case 3:
-                    return 0x80;// 128
-                case 4:
-                    return 0xC0;// 192
-                case 5:
-                    return 0xFF;// 255
-                default:
-                    return 0x0;// unrated/unknown
-            }
+                1 => 0x1,
+                2 => 0x40,// 64
+                3 => 0x80,// 128
+                4 => 0xC0,// 192
+                5 => 0xFF,// 255
+                _ => 0x0,// unrated/unknown
+            };
         }
     }
 }
